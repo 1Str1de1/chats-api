@@ -8,15 +8,21 @@ import (
 	"strings"
 )
 
-type ChatsService struct {
+type ChatsService interface {
+	ValidateChatCreate(title string) (string, error)
+	CreateChat(ctx context.Context, title string) (*model.Chat, error)
+	GetChat(id int) (*model.Chat, error)
+	DeleteChat(id int) error
+}
+type chatsService struct {
 	repo repository.ChatsRepository
 }
 
-func NewChatsRepository(repo repository.ChatsRepository) *ChatsService {
-	return &ChatsService{repo: repo}
+func NewChatsRepository(repo repository.ChatsRepository) ChatsService {
+	return &chatsService{repo: repo}
 }
 
-func (s *ChatsService) ValidateChatCreate(title string) (string, error) {
+func (s *chatsService) ValidateChatCreate(title string) (string, error) {
 	str := strings.TrimSpace(title)
 
 	if len(str) == 0 {
@@ -30,7 +36,7 @@ func (s *ChatsService) ValidateChatCreate(title string) (string, error) {
 	return str, nil
 }
 
-func (s *ChatsService) CreateChat(ctx context.Context, title string) (*model.Chat, error) {
+func (s *chatsService) CreateChat(ctx context.Context, title string) (*model.Chat, error) {
 	chat := &model.Chat{Title: title}
 
 	if err := s.repo.Create(ctx, chat); err != nil {
@@ -40,7 +46,7 @@ func (s *ChatsService) CreateChat(ctx context.Context, title string) (*model.Cha
 	return chat, nil
 }
 
-func (s *ChatsService) GetChat(id int) (*model.Chat, error) {
+func (s *chatsService) GetChat(id int) (*model.Chat, error) {
 	chat, err := s.repo.Get(id)
 
 	if err != nil {
@@ -50,6 +56,6 @@ func (s *ChatsService) GetChat(id int) (*model.Chat, error) {
 	return chat, nil
 }
 
-func (s *ChatsService) DeleteChat(id int) error {
+func (s *chatsService) DeleteChat(id int) error {
 	return s.repo.Delete(id)
 }

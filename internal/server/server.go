@@ -4,6 +4,8 @@ import (
 	"chats-api/internal/config"
 	"chats-api/internal/handler"
 	"chats-api/internal/model"
+	"chats-api/internal/repository"
+	"chats-api/internal/services"
 	"errors"
 	"fmt"
 	"log"
@@ -37,8 +39,13 @@ func NewServer(conf *config.Config) (*Server, error) {
 	if err := runMigrations(db); err != nil {
 		return nil, errors.New("error " + err.Error())
 	}
+	chatsRepo := repository.NewChatsRepo(db)
+	messagesRepo := repository.NewMessagesRepo(db)
 
-	h := handler.NewHandler(db, logger)
+	chats := services.NewChatsRepository(chatsRepo)
+	messages := services.NewMessagesRepository(messagesRepo)
+
+	h := handler.NewHandler(chats, messages, logger)
 
 	hdlr := configureMux(h, conf.ApiVersion)
 

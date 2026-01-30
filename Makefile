@@ -10,4 +10,7 @@ docker-restart:
 	docker-compose build --no-cache
 	docker-compose up -d
 
+test:
+	go test -v -timeout 30s ./...
+
 DEFAULT: build

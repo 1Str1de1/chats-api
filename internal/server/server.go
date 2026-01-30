@@ -38,7 +38,7 @@ func NewServer(conf *config.Config) (*Server, error) {
 		return nil, errors.New("error " + err.Error())
 	}
 
-	h := handler.NewHandler(db)
+	h := handler.NewHandler(db, logger)
 
 	hdlr := configureMux(h, conf.ApiVersion)
 
@@ -51,7 +51,7 @@ func NewServer(conf *config.Config) (*Server, error) {
 }
 
 func (s *Server) Start() error {
-	s.logger.Info("starting Server...")
+	s.logger.Info("starting server...")
 
 	if err := http.ListenAndServe("0.0.0.0:8080", s.router); err != nil {
 		return err

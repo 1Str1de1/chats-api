@@ -19,7 +19,8 @@ func NewMessagesRepo(db *gorm.DB) MessagesRepository {
 }
 
 func (r *messagesRepo) Create(ctx context.Context, message *model.Message) error {
-	if err := r.db.Where("chat_id = ?", message.ChatId).Error; err != nil {
+	var msg model.Message
+	if err := r.db.Where("chat_id = ?", message.ChatId).First(&msg).Error; err != nil {
 		return ErrChatNotFound
 	}
 

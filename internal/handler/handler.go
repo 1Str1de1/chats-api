@@ -6,6 +6,8 @@ import (
 	"chats-api/internal/services"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -15,9 +17,10 @@ import (
 type Handler struct {
 	chats    *services.ChatsService
 	messages *services.MessagesService
+	logger   *slog.Logger
 }
 
-func NewHandler(db *gorm.DB) *Handler {
+func NewHandler(db *gorm.DB, logger *slog.Logger) *Handler {
 	chatsRepo := repository.NewChatsRepo(db)
 	messagesRepo := repository.NewMessagesRepo(db)
 
@@ -27,11 +30,14 @@ func NewHandler(db *gorm.DB) *Handler {
 	return &Handler{
 		chats:    chats,
 		messages: messages,
+		logger:   logger,
 	}
 }
 
 func (h *Handler) HandleChatsCreate() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		h.logger.Info("handling create chat")
+
 		type CreateChatReq struct {
 			Title string `json:"title"`
 		}
@@ -42,33 +48,40 @@ func (h *Handler) HandleChatsCreate() http.HandlerFunc {
 
 		if err := decoder.Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+			h.logger.Error("got invalid json body")
 			return
 		}
 
 		title, err := h.chats.ValidateChatCreate(req.Title)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
+			h.logger.Error("chat request is invalid")
 			return
 		}
 
 		chat, err := h.chats.CreateChat(r.Context(), title)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
+			h.logger.Error(fmt.Sprintf("failed to create chat %v", err))
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(chat)
+		h.logger.Info(fmt.Sprintf("successfully created chat with title: %s", title))
 	}
 }
 
 func (h *Handler) HandleMessagesCreate() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		h.logger.Info("handling create chat")
+
 		chatIdStr := r.PathValue("id")
 		chatId, err := strconv.Atoi(chatIdStr)
 		if err != nil || chatId == 0 {
 			writeError(w, http.StatusBadRequest, "invalid chat_id")
+			h.logger.Error("chat id is invalid")
 			return
 		}
 
@@ -81,36 +94,43 @@ func (h *Handler) HandleMessagesCreate() http.HandlerFunc {
 		decoder.DisallowUnknownFields()
 		if err := decoder.Decode(&req); err != nil {
 			writeError(w, http.StatusBadRequest, "invalid json body: "+err.Error())
+			h.logger.Error("got invalid json body")
 			return
 		}
 
 		if err := h.messages.ValidateMessageCreate(req.Text); err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
+			h.logger.Error("message request is invalid")
 			return
 		}
 
 		message, err := h.messages.CreateMessage(r.Context(), req.Text, chatId)
 		if errors.Is(err, repository.ErrChatNotFound) {
 			writeError(w, http.StatusNotFound, err.Error())
+			h.logger.Error(fmt.Sprintf("chat with id %s not found", chatId))
 			return
 		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
+			h.logger.Error(fmt.Sprintf("failed to create message %v", err.Error()))
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(message)
+		h.logger.Info(fmt.Sprintf("successfully created message in chat %s with id: %s", chatId, message.Id))
 	}
 }
 
 func (h *Handler) HandleMessagesGet() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		h.logger.Info("handling get chat")
 		chatIdStr := r.PathValue("id")
 		chatId, err := strconv.Atoi(chatIdStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid chat_id")
+			h.logger.Error("chat id is invalid")
 			return
 		}
 
@@ -121,10 +141,12 @@ func (h *Handler) HandleMessagesGet() http.HandlerFunc {
 			l, err := strconv.Atoi(limitStr)
 			if err != nil {
 				writeError(w, http.StatusBadRequest, "invalid limit")
+				h.logger.Error("limit is invalid")
 				return
 			}
 			if l > 100 {
 				l = 100
+				h.logger.Warn("limit is too large, setting to 100")
 			}
 			limit = l
 		}
@@ -137,16 +159,19 @@ func (h *Handler) HandleMessagesGet() http.HandlerFunc {
 		chat, err := h.chats.GetChat(chatId)
 		if errors.Is(err, repository.ErrChatNotFound) {
 			writeError(w, http.StatusNotFound, err.Error())
+			h.logger.Error(fmt.Sprintf("chat with id %d not found", chatId))
 			return
 		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
+			h.logger.Error(fmt.Sprintf("failed to get chat with id %d: %v", chatId, err))
 			return
 		}
 
 		messages, err := h.messages.GetAllMessagesFromChat(chatId, limit)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
+			h.logger.Error(fmt.Sprintf("failed to get messages from chat with id %d: %v", chatId, err))
 			return
 		}
 		resp := Response{
@@ -156,29 +181,36 @@ func (h *Handler) HandleMessagesGet() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(&resp)
+		h.logger.Info(fmt.Sprintf("successfully fetched chat with id %d and limit %d", chatId, limit))
 	}
 }
 
 func (h *Handler) HandleChatsDelete() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		h.logger.Info("handling delete chat")
+
 		chatIdStr := r.PathValue("id")
 		chatId, err := strconv.Atoi(chatIdStr)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, "invalid chat_id")
+			h.logger.Error("chat id is invalid")
 			return
 		}
 
 		if err := h.chats.DeleteChat(chatId); errors.Is(err, repository.ErrChatNotFound) {
 			writeError(w, http.StatusNoContent, err.Error())
+			h.logger.Error(fmt.Sprintf("chat with id %d not found", chatId))
 			return
 		}
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
+			h.logger.Error(fmt.Sprintf("failed to delete chat with id %d: %v", chatId, err))
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNoContent)
+		h.logger.Info(fmt.Sprintf("successfully deleted chat with id %d", chatId))
 	}
 }
 

@@ -10,23 +10,15 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
-
-	"gorm.io/gorm"
 )
 
 type Handler struct {
-	chats    *services.ChatsService
-	messages *services.MessagesService
+	chats    services.ChatsService
+	messages services.MessagesService
 	logger   *slog.Logger
 }
 
-func NewHandler(db *gorm.DB, logger *slog.Logger) *Handler {
-	chatsRepo := repository.NewChatsRepo(db)
-	messagesRepo := repository.NewMessagesRepo(db)
-
-	chats := services.NewChatsRepository(chatsRepo)
-	messages := services.NewMessagesRepository(messagesRepo)
-
+func NewHandler(chats services.ChatsService, messages services.MessagesService, logger *slog.Logger) *Handler {
 	return &Handler{
 		chats:    chats,
 		messages: messages,
@@ -107,7 +99,7 @@ func (h *Handler) HandleMessagesCreate() http.HandlerFunc {
 		message, err := h.messages.CreateMessage(r.Context(), req.Text, chatId)
 		if errors.Is(err, repository.ErrChatNotFound) {
 			writeError(w, http.StatusNotFound, err.Error())
-			h.logger.Error(fmt.Sprintf("chat with id %s not found", chatId))
+			h.logger.Error(fmt.Sprintf("chat with id %d not found", chatId))
 			return
 		}
 		if err != nil {
@@ -119,7 +111,7 @@ func (h *Handler) HandleMessagesCreate() http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(message)
-		h.logger.Info(fmt.Sprintf("successfully created message in chat %s with id: %s", chatId, message.Id))
+		h.logger.Info(fmt.Sprintf("successfully created message in chat %d with id: %d", chatId, message.Id))
 	}
 }
 

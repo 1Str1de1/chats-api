@@ -1,0 +1,53 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: test_postgres
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U chats" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - test-network
+
+  web:
+    env_file:
+      - .env
+    build:
+      context: .
+      dockerfile: ./deployments/docker/web/Dockerfile
+    container_name: test_app
+    ports:
+      - "8080:8080"
+    restart: on-failure
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - APP_ENV=docker
+      - API_VERSION=${API_VERSION}
+      - API_PORT=${API_PORT}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_NAME=${DB_NAME}
+      - POSTGRES_HOST=${DB_HOST}
+      - POSTGRES_PORT=${DB_PORT}
+    networks:
+      - test-network
+    volumes:
+      - ./migrations:/app/migrations
+
+volumes:
+  postgres_data:
+
+networks:
+  test-network:
+    driver: bridge
